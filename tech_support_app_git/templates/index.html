@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Support Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <style>
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; }
+        .modal-content { background: #202b36; padding: 30px; border-radius: 8px; width: 450px; max-height: 85vh; overflow-y: auto; }
+        .status-badge { padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; }
+        .pending { background-color: #ffeeba; color: #856404; }
+        .paid { background-color: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <div style="text-align: right; padding: 10px;">
+        <span>Logged in as: <strong>{{ name }}</strong></span> | 
+        <a href="/logout" style="color: red;">Logout</a>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div style="background: #2ecc71; color: white; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px;">
+            {{ messages[0] }}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div style="text-align: center; margin-top: 40px; margin-bottom: 40px;">
+        <h1>Your Tech Support Dashboard</h1>
+        <button onclick="openModal()" style="font-size: 1.1rem; padding: 10px 20px;">+ Book New Support Session</button>
+    </div>
+
+    <hr>
+
+    <h2>Your Support Tickets</h2>
+    {% if bookings %}
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th>Ticket ID</th>
+                    <th>Scheduled Slot</th>
+                    <th>Issue Description</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for booking in bookings %}
+                <tr>
+                    <td>#{{ booking.id }}</td>
+                    <td>{{ booking.scheduled_time }}</td>
+                    <td>{{ booking.description[:40] }}{% if booking.description|length > 40 %}...{% endif %}</td>
+                    <td>
+                        {% if booking.payment_status == 'Paid' %}
+                            <span class="status-badge paid">Paid</span>
+                        {% else %}
+                            <span class="status-badge pending">Pending Payment</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if booking.payment_status == 'Paid' %}
+                            <a href="/success/{{ booking.id }}" style="background: #27ae60; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; font-size: 0.9rem;">View Remote Link</a>
+                        {% else %}
+                            <a href="/checkout/{{ booking.id }}" style="background: #e67e22; color: white; padding: 5px 10px; text-decoration: none; border-radius: 4px; font-size: 0.9rem; font-weight: bold;">Pay & Confirm</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="text-align: center; color: #888; margin-top: 20px;">You haven't raised any support tickets yet.</p>
+    {% endif %}
+
+    <div id="bookingModal" class="modal">
+        <div class="modal-content">
+            <h2>Session Details</h2>
+            <form id="supportForm" action="/book" method="POST" enctype="multipart/form-data">
+                <label>Full Name *</label>
+                <input type="text" name="name" required oninput="validateForm()">
+
+                <label>WhatsApp Number *</label>
+                <input type="tel" name="whatsapp" required oninput="validateForm()">
+
+                <label>Email ID *</label>
+                <input type="email" name="email" required oninput="validateForm()">
+
+                <label>License Number *</label>
+                <input type="text" name="license_no" required oninput="validateForm()">
+
+                <label>Describe Your Issue *</label>
+                <textarea name="description" required oninput="validateForm()"></textarea>
+
+                <label>Preferred Date & Time *</label>
+ <input type="datetime-local" id="schedulePicker" name="scheduled_time" required onchange="validateForm()">
+
+                <label>Upload Error Screenshot *</label>
+                <input type="file" name="screenshot" accept="image/*" required onchange="validateForm()">
+
+                <br><br>
+                <button type="submit" id="submitBtn" disabled style="width: 100%;">Save & Continue</button>
+                <button type="button" onclick="closeModal()" style="width: 100%; background: #444; margin-top: 10px;">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function openModal() { 
+    // 1. Calculate the time exactly 30 minutes from right now
+    const now = new Date();
+    const futureLimit = new Date(now.getTime() + 30 * 60 * 1000); // 30 mins * 60 secs * 1000 ms
+    
+    // 2. Format it into the specific ISO format 'YYYY-MM-DDTHH:MM'
+    const year = futureLimit.getFullYear();
+    const month = String(futureLimit.getMonth() + 1).padStart(2, '0');
+    const day = String(futureLimit.getDate()).padStart(2, '0');
+    const hours = String(futureLimit.getHours()).padStart(2, '0');
+    const minutes = String(futureLimit.getMinutes()).padStart(2, '0');
+    
+    const minDateTimeString = `${year}-${month}-${day}T${hours}:${minutes}`;
+    
+    // 3. Inject this minimum limit into our picker constraint rule
+    const picker = document.getElementById('schedulePicker');
+    picker.min = minDateTimeString;
+    picker.value = minDateTimeString; // Set it as the default start value
+    
+    document.getElementById('bookingModal').style.display = 'flex'; 
+}
+    
+    function closeModal() { document.getElementById('bookingModal').style.display = 'none'; }
+    
+    function validateForm() {
+        const form = document.getElementById('supportForm');
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = !form.checkValidity();
+    }
+</script>
+</body>
+</html>

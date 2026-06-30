@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Support Panel</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <style>
+        .status-badge { padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; }
+        .pending { background-color: #ffeeba; color: #856404; }
+        .paid { background-color: #d4edda; color: #155724; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { text-align: left; padding: 12px; vertical-align: top; }
+        
+        /* 🔌 Button States */
+        .btn-connect { background: #007bff; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block; text-align: center; }
+        .btn-disabled { background: #555; color: #aaa; pointer-events: none; padding: 6px 12px; border-radius: 4px; display: inline-block; text-align: center; }
+        
+        /* ⏳ Countdown Display inside the disabled button */
+        .admin-countdown { font-family: monospace; font-size: 0.85rem; display: block; color: #f1c40f; margin-top: 3px; }
+    </style>
+</head>
+<body>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h1>👑 Master Admin Control Panel</h1>
+        <div>
+            <span>Logged in as Admin: <strong>{{ current_user.email }}</strong></span> | 
+            <a href="/logout" style="color: red;">Logout</a>
+        </div>
+    </div>
+
+    <h2>Incoming Tech Support Requests</h2>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Client Details</th>
+                <th>Issue & Screenshot</th>
+                <th>Payment</th>
+                <th>Remote Action</th>
+                
+            </tr>
+        </thead>
+        <tbody>
+            {% for booking in bookings %}
+            <tr>
+                <td><strong>#{{ booking.id }}</strong></td>
+                <td>
+                    <strong>Name:</strong> {{ booking.name }}<br>
+                    <strong>WA:</strong> {{ booking.whatsapp }}<br>
+                    <strong>Email:</strong> {{ booking.email }}<br>
+                    <strong>Slot:</strong> <span class="target-slot" data-id="{{ booking.id }}">{{ booking.scheduled_time }}</span>
+                </td>
+                <td>
+                    <p style="margin: 0 0 10px 0; max-width: 250px;">{{ booking.description }}</p>
+                    {% if booking.screenshot_path %}
+                        <a href="/uploads/{{ booking.screenshot_path.split('\\')[-1].split('/')[-1] }}" target="_blank" style="font-size: 0.85rem; color: #3498db;">👁️ View Screenshot</a>
+                    {% else %}
+                        <span style="color: #666; font-size: 0.85rem;">No Screenshot</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if booking.payment_status == 'Paid' %}
+                        <span class="status-badge paid">Paid</span>
+                    {% else %}
+                        <span class="status-badge pending">Pending</span>
+                    {% endif %}
+                </td>
+                
+                <td>
+                    {% if booking.payment_status == 'Paid' %}
+                        {% if booking.admin_remote_link %}
+                            <a href="{{ booking.admin_remote_link }}" target="_blank" 
+                               id="connect-btn-{{ booking.id }}" 
+                               class="btn-connect">
+                                🔌 Connect Remote PC
+                            </a>
+                            
+                            <div id="lock-notice-{{ booking.id }}" class="btn-disabled" style="display: none;">
+                                🔒 Locked until Session
+                                <span id="timer-{{ booking.id }}" class="admin-countdown">00h 00m 00s</span>
+                            </div>
+                        {% else %}
+                            <span style="color: #e67e22; font-size: 0.85rem; font-weight: bold;">⏳ Link Generating...</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="btn-disabled">Awaiting Payment</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Find all slot timestamps displayed in the table rows
+            const slots = document.querySelectorAll(".target-slot");
+
+            slots.forEach(slot => {
+                const bookingId = slot.getAttribute("data-id");
+                const rawTargetStr = slot.innerText.trim();
+                if (!rawTargetStr) return;
+
+                const targetDate = new Date(rawTargetStr);
+                
+                // Fetch button DOM targets for this specific row entry
+                const connectBtn = document.getElementById(`connect-btn-${bookingId}`);
+                const lockNotice = document.getElementById(`lock-notice-${bookingId}`);
+                const timerDisplay = document.getElementById(`timer-${bookingId}`);
+
+                // If payment isn't complete or URLs are missing, skip countdown initialization
+                if (!connectBtn || !lockNotice) return;
+
+                function checkRowTimer() {
+                    const now = new Date();
+                    const difference = targetDate - now;
+
+                    if (difference <= 0) {
+                        // Countdown has hit 0:0:0! Show normal blue active session button
+                        lockNotice.style.display = "none";
+                        connectBtn.style.display = "inline-block";
+                        return true; // Signals interval resolution loop termination
+                    } else {
+                        // Session time is in the future. Force lock tracking view state
+                        connectBtn.style.display = "none";
+                        lockNotice.style.display = "inline-block";
+
+                        // Compute running hours, minutes, and seconds remaining
+                        const hours = Math.floor((difference / (1000 * 60 * 60)));
+                        const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+                        const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+                        // Inject clean string padding output
+                        timerDisplay.innerText = 
+                            `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+                        return false;
+                    }
+                }
+
+                // Initialize immediately on document load
+                const isComplete = checkRowTimer();
+                
+                // Set dedicated interval polling loops if the countdown is running down
+                if (!isComplete) {
+                    const intervalId = setInterval(() => {
+                        const done = checkRowTimer();
+                        if (done) clearInterval(intervalId);
+                    }, 1000);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
